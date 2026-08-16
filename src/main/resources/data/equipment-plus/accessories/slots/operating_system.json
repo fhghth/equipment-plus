@@ -1,0 +1,7 @@
+﻿{
+  "icon": "equipment-plus:slot/empty_operating_system_slot",
+  "order": 130,
+  "validators": [
+    "accessories-api:tag"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "icon": "equipment-plus:slot/empty_os_skill_slot",
+  "order": 140,
+  "size": 0,
+  "validators": [
+    "accessories-api:tag"
+  ]
+}

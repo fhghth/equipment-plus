@@ -1,0 +1,17 @@
+{
+	"required": true,
+	"package": "yuboobo.equipment.client.mixin",
+	"compatibilityLevel": "JAVA_25",
+	"mixins": [
+		"AbstractArrowMixin",
+		"HudMixin",
+		"MinecraftMixin",
+		"MouseHandlerMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	},
+	"overwrites": {
+		"requireAnnotations": true
+	}
+}

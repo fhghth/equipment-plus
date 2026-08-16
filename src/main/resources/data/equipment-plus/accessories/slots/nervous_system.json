@@ -1,0 +1,7 @@
+﻿{
+  "icon": "equipment-plus:slot/empty_nervous_system_slot",
+  "order": 150,
+  "validators": [
+    "accessories-api:tag"
+  ]
+}

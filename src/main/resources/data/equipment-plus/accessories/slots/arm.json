@@ -1,0 +1,7 @@
+﻿{
+  "icon": "equipment-plus:slot/empty_arm_slot",
+  "order": 115,
+  "validators": [
+    "accessories-api:tag"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "entities": [
+    "minecraft:player"
+  ],
+  "slots": [
+    "arm",
+    "leg",
+    "eye",
+    "operating_system",
+    "os_skill",
+    "nervous_system"
+  ]
+}

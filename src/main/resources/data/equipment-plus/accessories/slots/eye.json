@@ -1,0 +1,7 @@
+﻿{
+  "icon": "equipment-plus:slot/empty_eye_slot",
+  "order": 125,
+  "validators": [
+    "accessories-api:tag"
+  ]
+}
