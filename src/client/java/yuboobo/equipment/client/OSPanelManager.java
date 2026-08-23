@@ -20,6 +20,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
@@ -55,8 +56,7 @@ public final class OSPanelManager {
 	private static final int EMPTY_HINT_HEIGHT = 14;
 
 	/** ARGB colors used by the panel. */
-	private static final int COLOR_BACKGROUND = 0x99000000;
-	private static final int COLOR_BORDER = 0xCCFFFFFF;
+	private static final int COLOR_FULLSCREEN_OVERLAY = 0x1A00FF00;
 	private static final int COLOR_TITLE = 0xFF9FE8FF;
 	private static final int COLOR_SELECTED_BG = 0x66FFFFFF;
 	private static final int COLOR_ENTRY_BG = 0x40000000;
@@ -65,6 +65,11 @@ public final class OSPanelManager {
 	private static final int COLOR_FOOTER = 0xFF999999;
 	private static final int COLOR_HINT = 0xFF666666;
 	private static final int COLOR_HIGHLIGHT = 0xFFFF4545;
+
+	/** Vanilla glow-outline look: a thick translucent halo plus a crisp core stroke. */
+	private static final int COLOR_GLOW_HALO = 0x59FF2020;
+	private static final int COLOR_GLOW_CORE = 0xFFFF7A7A;
+	private static final int COLOR_GLOW_FILL = 0x14E00000;
 
 	private static boolean open;
 	private static int selectedSlot = -1;
@@ -134,6 +139,19 @@ public final class OSPanelManager {
 	}
 
 	/**
+	 * Fires the skill at the given position in the panel list (top to bottom), regardless
+	 * of the current scroll selection. Returns true when a skill was fired. Called from
+	 * the {@code KeyboardHandler} mixin for the hotbar number keys.
+	 */
+	public static boolean tryFireSlotIndex(int index) {
+		if (!open || index < 0 || index >= skills.size()) {
+			return false;
+		}
+		ClientPlayNetworking.send(new OSSkillActivatePayload(skills.get(index).slot()));
+		return true;
+	}
+
+	/**
 	 * Renders the skill panel as a HUD element.
 	 */
 	public static void render(GuiGraphicsExtractor graphics, DeltaTracker deltaTracker) {
@@ -146,6 +164,9 @@ public final class OSPanelManager {
 		int guiWidth = graphics.guiWidth();
 		int guiHeight = graphics.guiHeight();
 
+		// Full-screen green overlay at 10% opacity
+		graphics.fill(0, 0, guiWidth, guiHeight, COLOR_FULLSCREEN_OVERLAY);
+
 		int contentHeight = skills.isEmpty()
 			? EMPTY_HINT_HEIGHT
 			: skills.size() * (ENTRY_HEIGHT + ENTRY_SPACING) - ENTRY_SPACING;
@@ -154,14 +175,6 @@ public final class OSPanelManager {
 		int panelY = guiHeight / 2 - panelHeight / 2;
 		int panelRight = panelX + PANEL_WIDTH;
 		int panelBottom = panelY + panelHeight;
-
-		// Semi-transparent background
-		graphics.fill(panelX, panelY, panelRight, panelBottom, COLOR_BACKGROUND);
-		// Border
-		graphics.horizontalLine(panelX, panelRight - 1, panelY, COLOR_BORDER);
-		graphics.horizontalLine(panelX, panelRight - 1, panelBottom - 1, COLOR_BORDER);
-		graphics.verticalLine(panelX, panelY, panelBottom - 1, COLOR_BORDER);
-		graphics.verticalLine(panelRight - 1, panelY, panelBottom - 1, COLOR_BORDER);
 
 		// Title
 		graphics.text(font,
@@ -207,7 +220,8 @@ public final class OSPanelManager {
 
 	/**
 	 * Called from the {@code LevelRenderEvents.BEFORE_GIZMOS} event while the panel is
-	 * open; draws a box and a name tag around the targeted entity.
+	 * open; draws a vanilla-glow-style outline (halo + core stroke + faint fill) and a
+	 * name tag around the targeted entity.
 	 */
 	public static void renderTargetHighlight() {
 		if (!open || target == null) {
@@ -219,8 +233,10 @@ public final class OSPanelManager {
 			return;
 		}
 
-		Gizmos.cuboid(target.getBoundingBox().inflate(0.12D),
-			GizmoStyle.stroke(COLOR_HIGHLIGHT, 2.5F)).setAlwaysOnTop();
+		AABB box = target.getBoundingBox().inflate(0.12D);
+		Gizmos.cuboid(box, GizmoStyle.stroke(COLOR_GLOW_HALO, 4.0F)).setAlwaysOnTop();
+		Gizmos.cuboid(box, GizmoStyle.strokeAndFill(COLOR_GLOW_CORE, 1.6F, COLOR_GLOW_FILL))
+			.setAlwaysOnTop();
 		Gizmos.billboardTextOverMob(target, 0,
 			target.getDisplayName().getString(), COLOR_HIGHLIGHT, 0.55F);
 	}
@@ -260,7 +276,8 @@ public final class OSPanelManager {
 	private static boolean hasOperatingSystem(LocalPlayer player) {
 		ICuriosItemHandler inventory = AccessoriesAPI.getCuriosInventoryOrNull(player);
 		return inventory != null
-			&& inventory.findFirstCurio(EquipmentPlus.OPERATING_SYSTEM).isPresent();
+			&& inventory.findFirstCurio(
+				stack -> stack.getItem() instanceof OperatingSystemItem).isPresent();
 	}
 
 	private static void refreshSkills(LocalPlayer player) {
@@ -313,34 +330,70 @@ public final class OSPanelManager {
 	}
 
 	private static void updateTarget(ClientLevel level, LocalPlayer player) {
-		Vec3 eye = player.getEyePosition();
-		Vec3 look = player.getLookAngle().scale(RAYCAST_RANGE);
+		float partialTick = Minecraft.getInstance().getDeltaTracker()
+			.getGameTimeDeltaPartialTick(true);
+		Vec3 eye = player.getEyePosition(partialTick);
+		Vec3 look = player.getViewVector(partialTick).scale(RAYCAST_RANGE);
 		Vec3 end = eye.add(look);
 
-		if (level.clip(new ClipContext(eye, end, ClipContext.Block.COLLIDER,
-			ClipContext.Fluid.NONE, player)).getType() != HitResult.Type.MISS) {
-			target = null;
-			return;
+		BlockHitResult blockResult = level.clip(new ClipContext(eye, end,
+			ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, player));
+		RaycastHit entityHit = getEntityHitResult(level, player, eye, end,
+			new AABB(eye, end),
+			entity -> entity != player
+				&& entity != player.getVehicle()
+				&& entity.isAlive()
+				&& !entity.isSpectator()
+				&& !entity.isInvisibleTo(player)
+				&& entity instanceof LivingEntity);
+
+		if (entityHit != null) {
+			// Jade-style nearest-wins: an entity under the crosshair wins over a block
+			// even when the ray continues on to the ground/background block.
+			if (blockResult.getType() == HitResult.Type.BLOCK
+				&& entityHit.location().distanceToSqr(eye)
+					> blockResult.getLocation().distanceToSqr(eye)) {
+				entityHit = null;
+			}
 		}
+		target = entityHit == null ? null : entityHit.entity();
+	}
 
-		AABB search = player.getBoundingBox().expandTowards(look).inflate(1.0D);
-		List<Entity> entities = level.getEntities(player, search,
-			entity -> entity instanceof LivingEntity && entity.isAlive());
+	private record RaycastHit(Entity entity, Vec3 location) {
+	}
+
+	/**
+	 * Entity pick following vanilla {@code ProjectileUtil} (as used by Jade): boxes
+	 * smaller than a minimum size are inflated, an entity containing the ray start
+	 * wins immediately, otherwise the hit point nearest to the start wins.
+	 */
+	private static RaycastHit getEntityHitResult(ClientLevel level, Entity viewer,
+		Vec3 start, Vec3 end, AABB bound, java.util.function.Predicate<Entity> filter) {
 		double best = Double.MAX_VALUE;
-		Entity hit = null;
+		RaycastHit hit = null;
 
-		for (Entity entity : entities) {
-			Optional<Vec3> point = entity.getBoundingBox().inflate(0.3D).clip(eye, end);
+		for (Entity entity : level.getEntities(viewer, bound, filter)) {
+			AABB box = entity.getBoundingBox();
+
+			if (box.getSize() < 0.3D) {
+				box = box.inflate(0.3D);
+			}
+
+			if (box.contains(start)) {
+				return new RaycastHit(entity, start);
+			}
+
+			Optional<Vec3> point = box.clip(start, end);
 
 			if (point.isPresent()) {
-				double distance = eye.distanceToSqr(point.get());
+				double distance = start.distanceToSqr(point.get());
 
 				if (distance < best) {
 					best = distance;
-					hit = entity;
+					hit = new RaycastHit(entity, point.get());
 				}
 			}
 		}
-		target = hit;
+		return hit;
 	}
 }

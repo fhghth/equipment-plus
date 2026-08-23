@@ -16,11 +16,16 @@ import org.lwjgl.glfw.GLFW;
 import yuboobo.accessories.api.AccessoriesAPI;
 
 import yuboobo.equipment.EquipmentPlus;
-import yuboobo.equipment.item.NervousSystemItem;
+import yuboobo.equipment.client.hud.EffectHud;
+import yuboobo.equipment.client.hud.EffectHudEntry;
+import yuboobo.equipment.item.NervousItem;
 import yuboobo.equipment.network.CSkillActivatePayload;
 import yuboobo.equipment.network.NervousActivatePayload;
 import yuboobo.equipment.network.SNervousStatusPayload;
 import yuboobo.equipment.network.SSkillStatusPayload;
+import yuboobo.equipment.skill.BerserkManager;
+import yuboobo.equipment.skill.NervousSlowManager;
+import yuboobo.equipment.skill.SpeedBoostManager;
 
 public class EquipmentPlusClient implements ClientModInitializer {
 
@@ -51,6 +56,19 @@ public class EquipmentPlusClient implements ClientModInitializer {
 		KeyMappingHelper.registerKeyMapping(OS_PANEL_KEY);
 		KeyMappingHelper.registerKeyMapping(NERVOUS_KEY);
 
+		EffectHud.register("speed", new EffectHudEntry(
+			Component.translatable("equipment-plus.hud.speed"),
+			EquipmentPlus.CHARM,
+			SpeedBoostManager.BOOST_DURATION_TICKS, SpeedBoostManager.COOLDOWN_TICKS));
+		EffectHud.register("sandevistan", new EffectHudEntry(
+			Component.translatable("equipment-plus.hud.sandevistan"),
+			EquipmentPlus.NERVOUS_SYSTEM,
+			NervousSlowManager.SLOW_DURATION_TICKS, NervousSlowManager.COOLDOWN_TICKS));
+		EffectHud.register("berserk", new EffectHudEntry(
+			Component.translatable("equipment-plus.hud.berserk"),
+			EquipmentPlus.BERSERK,
+			BerserkManager.DURATION_TICKS, BerserkManager.COOLDOWN_TICKS));
+
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
 			while (SKILL_KEY.consumeClick()) {
 				ClientPlayNetworking.send(new CSkillActivatePayload());
@@ -62,13 +80,27 @@ public class EquipmentPlusClient implements ClientModInitializer {
 			}
 			OSPanelManager.tick(client);
 			TimeSlowClient.tick();
+			EffectHud.tick();
 		});
 
 		ClientPlayNetworking.registerGlobalReceiver(SSkillStatusPayload.TYPE,
 			(payload, context) -> context.client().execute(() -> {
 				Minecraft minecraft = Minecraft.getInstance();
+				EffectHudEntry entry = EffectHud.get("speed");
 
-				if (minecraft.player != null) {
+				if (entry != null) {
+
+					if (payload.activated()) {
+						entry.activate();
+					} else if (payload.cooldownSeconds() == 0) {
+						entry.reset();
+					} else {
+						entry.setCooldown(payload.cooldownSeconds() * 20);
+					}
+				}
+
+				if (minecraft.player != null
+					&& (payload.activated() || payload.cooldownSeconds() > 0)) {
 					Component message = payload.activated()
 						? Component.translatable("equipment-plus.skill.activated")
 						: Component.translatable("equipment-plus.skill.cooldown",
@@ -80,15 +112,33 @@ public class EquipmentPlusClient implements ClientModInitializer {
 		ClientPlayNetworking.registerGlobalReceiver(SNervousStatusPayload.TYPE,
 			(payload, context) -> context.client().execute(() -> {
 				Minecraft minecraft = Minecraft.getInstance();
+				boolean berserk = payload.variant() == SNervousStatusPayload.VARIANT_BERSERK;
+				EffectHudEntry entry = EffectHud.get(berserk ? "berserk" : "sandevistan");
 
-				if (payload.activated()) {
+				if (entry != null) {
+
+					if (payload.activated()) {
+						entry.activate();
+					} else if (payload.cooldownSeconds() == 0) {
+						entry.reset();
+					} else {
+						entry.setCooldown(payload.cooldownSeconds() * 20);
+					}
+				}
+
+				if (!berserk && payload.activated()) {
 					TimeSlowClient.activateNervousSlow();
 				}
 
-				if (minecraft.player != null) {
+				if (minecraft.player != null
+					&& (payload.activated() || payload.cooldownSeconds() > 0)) {
 					Component message = payload.activated()
-						? Component.translatable("equipment-plus.nervous.activated")
-						: Component.translatable("equipment-plus.nervous.cooldown",
+						? Component.translatable(berserk
+							? "equipment-plus.berserk.activated"
+							: "equipment-plus.nervous.activated")
+						: Component.translatable(berserk
+							? "equipment-plus.berserk.cooldown"
+							: "equipment-plus.nervous.cooldown",
 							payload.cooldownSeconds());
 					minecraft.player.sendSystemMessage(message);
 				}
@@ -96,6 +146,8 @@ public class EquipmentPlusClient implements ClientModInitializer {
 
 		HudElementRegistry.addLast(EquipmentPlus.id("os_panel"),
 			OSPanelManager::render);
+		HudElementRegistry.addLast(EquipmentPlus.id("effect_hud"),
+			EffectHud::render);
 		LevelRenderEvents.BEFORE_GIZMOS.register(
 			context -> OSPanelManager.renderTargetHighlight());
 	}
@@ -104,6 +156,7 @@ public class EquipmentPlusClient implements ClientModInitializer {
 		return minecraft.player != null
 			&& AccessoriesAPI.getCuriosInventoryOrNull(minecraft.player) != null
 			&& AccessoriesAPI.getCuriosInventoryOrNull(minecraft.player)
-				.findCurio(NervousSystemItem.NERVOUS_SLOT, 0).isPresent();
+				.findFirstCurio(
+					stack -> stack.getItem() instanceof NervousItem).isPresent();
 	}
 }
