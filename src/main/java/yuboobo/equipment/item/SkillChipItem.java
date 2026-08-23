@@ -1,24 +1,28 @@
 package yuboobo.equipment.item;
 
-import net.minecraft.resources.Identifier;
+import java.util.List;
+
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
-import yuboobo.accessories.api.SlotContext;
 import yuboobo.accessories.api.type.capability.ICurio;
 import yuboobo.accessories.api.type.capability.ICurioItem;
 
-import yuboobo.equipment.EquipmentPlus;
-
 /**
- * Placeholder skill chip. Any item placed in an {@code os_skill} slot is treated as
- * a skill; chips may later be split into distinct behaviors.
+ * Base class for OS skill chips. Concrete subclasses define distinct skills which are
+ * dispatched in {@link yuboobo.equipment.skill.OSSkillManager}.
  */
-public class SkillChipItem extends Item implements ICurioItem {
+public abstract class SkillChipItem extends Item implements ICurioItem {
 
-	public SkillChipItem(Properties properties) {
+	protected SkillChipItem(Properties properties) {
 		super(properties);
 	}
+
+	/**
+	 * The translation key of the tooltip line describing this chip's skill.
+	 */
+	protected abstract String getSkillTooltipKey();
 
 	@Override
 	public ICurio getCurio(ItemStack stack) {
@@ -30,8 +34,10 @@ public class SkillChipItem extends Item implements ICurioItem {
 			}
 
 			@Override
-			public boolean canEquipFromUse(SlotContext slotContext) {
-				return true;
+			public List<Component> getSlotsTooltip(List<Component> tooltips,
+												   Item.TooltipContext context) {
+				tooltips.add(Component.translatable(getSkillTooltipKey()));
+				return tooltips;
 			}
 		};
 	}

@@ -1,6 +1,8 @@
 {
   "replace": false,
   "values": [
-    "equipment-plus:skill_chip"
+    "equipment-plus:short_circuit_chip",
+    "equipment-plus:contagion_chip",
+    "equipment-plus:memory_wipe_chip"
   ]
 }

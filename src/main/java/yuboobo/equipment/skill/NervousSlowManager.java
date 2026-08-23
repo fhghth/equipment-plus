@@ -7,6 +7,7 @@ import java.util.UUID;
 import net.minecraft.server.level.ServerPlayer;
 
 import yuboobo.accessories.api.AccessoriesAPI;
+import yuboobo.accessories.api.type.capability.ICuriosItemHandler;
 
 import yuboobo.equipment.item.NervousSystemItem;
 import yuboobo.equipment.time.TimeSlowManager;
@@ -29,9 +30,16 @@ public class NervousSlowManager {
 	private NervousSlowManager() {
 	}
 
+	public static boolean isEquipped(ServerPlayer player) {
+		ICuriosItemHandler inventory = AccessoriesAPI.getCuriosInventoryOrNull(player);
+		return inventory != null
+			&& inventory.findFirstCurio(
+				stack -> stack.getItem() instanceof NervousSystemItem).isPresent();
+	}
+
 	/**
 	 * Attempts to activate the nervous-system slow. Returns true when the effect
-	 * was started; false when on cooldown or no nervous system is equipped.
+	 * was started; false when on cooldown or no Sandevistan is equipped.
 	 */
 	public static boolean tryActivate(ServerPlayer player) {
 		long gameTime = player.level().getGameTime();
@@ -42,9 +50,7 @@ public class NervousSlowManager {
 			return false;
 		}
 
-		if (AccessoriesAPI.getCuriosInventory(player)
-			.flatMap(inventory -> inventory.findCurio(NervousSystemItem.NERVOUS_SLOT, 0))
-			.isEmpty()) {
+		if (!isEquipped(player)) {
 			return false;
 		}
 
@@ -80,7 +86,8 @@ public class NervousSlowManager {
 		return (int) Math.max(0L, state.cooldownUntilTick - player.level().getGameTime());
 	}
 
-	public static void remove(UUID uuid) {
-		STATES.remove(uuid);
+	public static void remove(ServerPlayer player) {
+		STATES.remove(player.getUUID());
+		TimeSlowManager.unregisterSource(player, TimeSlowManager.NERVOUS_SOURCE);
 	}
 }

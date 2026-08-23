@@ -1,19 +1,24 @@
 package yuboobo.equipment.item;
 
+import java.util.List;
+
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
+import yuboobo.accessories.api.CurioAttributeModifiers;
 import yuboobo.accessories.api.SlotContext;
 import yuboobo.accessories.api.type.capability.ICurio;
 import yuboobo.accessories.api.type.capability.ICurioItem;
 
 import yuboobo.equipment.EquipmentPlus;
+import yuboobo.equipment.network.SSkillStatusPayload;
 import yuboobo.equipment.skill.SpeedBoostManager;
 
 public class CharmItem extends Item implements ICurioItem {
@@ -35,35 +40,28 @@ public class CharmItem extends Item implements ICurioItem {
 			}
 
 			@Override
-			public boolean canEquipFromUse(SlotContext slotContext) {
-				return true;
+			public CurioAttributeModifiers getDefaultCurioAttributeModifiers() {
+				return CurioAttributeModifiers.builder()
+					.addModifier(Attributes.MAX_HEALTH,
+						new AttributeModifier(HEALTH_MODIFIER_ID, MAX_HEALTH_BONUS,
+							AttributeModifier.Operation.ADD_VALUE),
+						"charm")
+					.build();
 			}
 
 			@Override
 			public void onEquip(SlotContext slotContext, ItemStack prevStack) {
 				if (slotContext.entity() instanceof Player player) {
-					AttributeInstance attribute =
-						player.getAttribute(Attributes.MAX_HEALTH);
-
-					if (attribute != null
-						&& attribute.getModifier(HEALTH_MODIFIER_ID) == null) {
-						attribute.addTransientModifier(
-							new AttributeModifier(HEALTH_MODIFIER_ID, MAX_HEALTH_BONUS,
-								AttributeModifier.Operation.ADD_VALUE));
-						player.heal((float) MAX_HEALTH_BONUS);
-					}
+					player.heal((float) MAX_HEALTH_BONUS);
 				}
 			}
 
 			@Override
 			public void onUnequip(SlotContext slotContext, ItemStack newStack) {
-				if (slotContext.entity() instanceof Player player) {
-					AttributeInstance attribute =
-						player.getAttribute(Attributes.MAX_HEALTH);
 
-					if (attribute != null) {
-						attribute.removeModifier(HEALTH_MODIFIER_ID);
-					}
+				if (slotContext.entity() instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
+					SpeedBoostManager.remove(serverPlayer.getUUID());
+					ServerPlayNetworking.send(serverPlayer, new SSkillStatusPayload(false, 0));
 				}
 			}
 
@@ -74,6 +72,13 @@ public class CharmItem extends Item implements ICurioItem {
 				if (entity instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
 					SpeedBoostManager.tick(serverPlayer);
 				}
+			}
+
+			@Override
+			public List<Component> getSlotsTooltip(List<Component> tooltips,
+												   net.minecraft.world.item.Item.TooltipContext context) {
+				tooltips.add(Component.translatable("equipment-plus.charm.tooltip"));
+				return tooltips;
 			}
 		};
 	}

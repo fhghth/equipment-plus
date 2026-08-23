@@ -1,6 +1,7 @@
 {
   "replace": false,
   "values": [
-    "equipment-plus:nervous_system"
+    "equipment-plus:nervous_system",
+    "equipment-plus:berserk"
   ]
 }
